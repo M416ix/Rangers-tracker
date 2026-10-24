@@ -1,6 +1,8 @@
 import streamlit as st
 import datetime
 import urllib.parse
+import urllib.request
+import json
 
 # Page Setup
 st.set_page_config(
@@ -35,13 +37,42 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 1. ONCE-A-DAY PRICE CHECKER (Runs max once every 24 hours)
+# 0. UPCOMING 2026/27 RANGERS FIXTURES DICTIONARY
+FIXTURES_26_27 = {
+    "Rangers vs St Johnstone (Ibrox - Sat 24 Oct 2026)": datetime.date(2026, 10, 24),
+    "Hearts vs Rangers (Tynecastle - Wed 28 Oct 2026)": datetime.date(2026, 10, 28),
+    "Rangers vs Aberdeen (Hampden Cup Semi - Sat 31 Oct 2026)": datetime.date(2026, 10, 31),
+    "St Mirren vs Rangers (Paisley - Sat 7 Nov 2026)": datetime.date(2026, 11, 7),
+    "Motherwell vs Rangers (Fir Park - Sat 21 Nov 2026)": datetime.date(2026, 11, 21),
+    "Rangers vs Aberdeen (Ibrox - Tue 24 Nov 2026)": datetime.date(2026, 11, 24),
+    "Rangers vs Falkirk (Ibrox - Sat 28 Nov 2026)": datetime.date(2026, 11, 28),
+    "Rangers vs Dundee United (Ibrox - Wed 2 Dec 2026)": datetime.date(2026, 12, 2),
+    "Hibernian vs Rangers (Easter Road - Mon 7 Dec 2026)": datetime.date(2026, 12, 7),
+    "St Johnstone vs Rangers (Perth - Sun 13 Dec 2026)": datetime.date(2026, 12, 13),
+    "Rangers vs Hearts (Ibrox - Sun 20 Dec 2026)": datetime.date(2026, 12, 20),
+    "Kilmarnock vs Rangers (Rugby Park - Sat 26 Dec 2026)": datetime.date(2026, 12, 26),
+    "Rangers vs Dundee (Ibrox - Wed 30 Dec 2026)": datetime.date(2026, 12, 30),
+    "Rangers vs Celtic (Ibrox - Sun 3 Jan 2027)": datetime.date(2027, 1, 3),
+    "Dundee United vs Rangers (Tannadice - Sat 9 Jan 2027)": datetime.date(2027, 1, 9),
+    "Rangers vs St Johnstone (Ibrox - Sat 23 Jan 2027)": datetime.date(2027, 1, 23),
+    "Aberdeen vs Rangers (Pittodrie - Sat 30 Jan 2027)": datetime.date(2027, 1, 30),
+    "Rangers vs Kilmarnock (Ibrox - Wed 3 Feb 2027)": datetime.date(2027, 2, 3),
+    "Falkirk vs Rangers (Falkirk - Sat 13 Feb 2027)": datetime.date(2027, 2, 13),
+    "Rangers vs St Mirren (Ibrox - Sat 20 Feb 2027)": datetime.date(2027, 2, 20),
+    "Celtic vs Rangers (Parkhead - Sat 27 Feb 2027)": datetime.date(2027, 2, 27),
+    "Rangers vs Motherwell (Ibrox - Sat 13 Mar 2027)": datetime.date(2027, 3, 13),
+    "Hearts vs Rangers (Tynecastle - Sat 20 Mar 2027)": datetime.date(2027, 3, 20),
+    "Rangers vs Hibernian (Ibrox - Sat 3 Apr 2027)": datetime.date(2027, 4, 3),
+    "Custom / Other Match": datetime.date.today()
+}
+
+# 1. LIVE DAILY PRICE FETCHER (Runs max once every 24 hours per date)
 @st.cache_data(ttl=86400)
-def get_daily_searched_prices(date_str):
+def get_daily_searched_prices(out_date_str, ret_date_str):
     now = datetime.datetime.now()
     last_checked = now.strftime("%d %b %Y at %H:%M")
-    
-    # Daily searched baseline prices per option
+    is_live = False
+
     flight_options = {
         "easyJet (Belfast Int BFS <-> Glasgow)": 58.0,
         "easyJet (Belfast City BHD <-> Glasgow)": 68.0,
@@ -60,201 +91,56 @@ def get_daily_searched_prices(date_str):
         "Leonardo Royal Hotel Glasgow": 105.0,
         "Custom / Other Hotel": 90.0
     }
-    
-    return flight_options, hotel_options, last_checked
 
-# 2. MATCH & DATE DETAILS
-st.subheader("📅 Match Details")
-col1, col2 = st.columns(2)
+    api_key = None
+    try:
+        api_key = st.secrets["SERPAPI_KEY"]
+    except Exception:
+        api_key = None
 
-with col1:
-    fixture = st.text_input(
-        "Fixture / Opponent",
-        value="Rangers vs "
-    )
-    travel_date = st.date_input(
-        "Match Date",
-        datetime.date.today()
-    )
+    if api_key:
+        # A. Fetch Live Flight Prices (BFS/BHD -> GLA)
+        try:
+            f_Type = "1" if out_date_str != ret_date_str else "2"
+            f_params = {
+                "engine": "google_flights",
+                "departure_id": "BFS,BHD",
+                "arrival_id": "GLA",
+                "outbound_date": out_date_str,
+                "type": f_Type,
+                "currency": "GBP",
+                "hl": "en",
+                "api_key": api_key
+            }
+            if f_Type == "1":
+                f_params["return_date"] = ret_date_str
 
-with col2:
-    num_people = st.number_input(
-        "People Travelling",
-        min_value=1,
-        max_value=10,
-        value=2,
-        step=1
-    )
-    match_ticket = st.number_input(
-        "Match Ticket (£ per person)",
-        min_value=0.0,
-        value=48.0,
-        step=1.0
-    )
+            f_query = urllib.parse.urlencode(f_params)
+            f_url = f"https://serpapi.com/search.json?{f_query}"
+            req = urllib.request.urlopen(f_url, timeout=10)
+            f_data = json.loads(req.read().decode("utf-8"))
+            
+            best_flights = f_data.get("best_flights", [])
+            if best_flights:
+                cheapest = float(best_flights[0].get("price", 58.0))
+                if f_Type == "2":
+                    cheapest = cheapest * 2.0
+                flight_options["easyJet (Belfast Int BFS <-> Glasgow)"] = cheapest
+                is_live = True
+        except Exception:
+            pass
 
-flight_dict, hotel_dict, last_sync = get_daily_searched_prices(
-    str(travel_date)
-)
-st.caption(
-    f"🔄 *Daily prices searched & synced: {last_sync} "
-    f"(Cached for 24h)*"
-)
-
-st.divider()
-
-# 3. ACCOMMODATION (0-Night Day Trip + Hotel Selector + Manual Price)
-st.subheader("🏨 Accommodation")
-nights = st.slider(
-    "Nights in Glasgow (Select 0 for Day Trip)",
-    min_value=0,
-    max_value=5,
-    value=1
-)
-
-if nights == 0:
-    st.info(
-        "⚡ **Day Trip Mode (0 Nights):** Same-day travel "
-        "— £0 accommodation cost."
-    )
-    selected_hotel = "None (Day Trip)"
-    hotel_total = 0.0
-    hotel_per_person = 0.0
-else:
-    selected_hotel = st.selectbox(
-        "Select Hotel Option",
-        list(hotel_dict.keys())
-    )
-    searched_hotel_price = hotel_dict[selected_hotel]
-    
-    h_col1, h_col2 = st.columns(2)
-    with h_col1:
-        room_rate = st.number_input(
-            "Nightly Rate (£ - Auto-filled or Edit)",
-            min_value=0.0,
-            value= float(searched_hotel_price),
-            step=5.0
-        )
-    with h_col2:
-        rooms_needed = st.number_input(
-            "Number of Rooms",
-            min_value=1,
-            max_value=5,
-            value=1,
-            step=1
-        )
-    
-    hotel_total = room_rate * nights * rooms_needed
-    hotel_per_person = hotel_total / num_people
-    st.caption(
-        f"Total Hotel ({selected_hotel}): **£{hotel_total:.2f}** "
-        f"(£{hotel_per_person:.2f} per person)"
-    )
-
-st.divider()
-
-# 4. FLIGHTS & TRAVEL OPTIONS (Option Selector + Daily Price + Manual Edit)
-st.subheader("✈️ Flights, Ferry & Transfers")
-selected_transport = st.selectbox(
-    "Select Flight / Travel Option",
-    list(flight_dict.keys())
-)
-searched_flight_price = flight_dict[selected_transport]
-
-t_col1, t_col2 = st.columns(2)
-with t_col1:
-    main_transport = st.number_input(
-        "Return Fare (£ per person - Auto-filled or Edit)",
-        min_value=0.0,
-        value=float(searched_flight_price),
-        step=5.0
-    )
-with t_col2:
-    is_dub = "Dublin" in selected_transport
-    default_extra = 25.0 if is_dub else 12.0
-    extra_transfers = st.number_input(
-        "Airport Transfers / Subway / Buses (£ per person)",
-        min_value=0.0,
-        value=default_extra,
-        step=2.0
-    )
-
-st.divider()
-
-# 5. FOOD & DRINK
-st.subheader("🍽️ Food & Drink")
-daily_spending = st.number_input(
-    "Food & Drink Budget (£ per person)",
-    min_value=0.0,
-    value=60.0,
-    step=10.0
-)
-
-st.divider()
-
-# 6. FINAL BREAKDOWN & WHATSAPP SHARE
-travel_per_person = main_transport + extra_transfers
-total_per_person = (
-    match_ticket
-    + hotel_per_person
-    + travel_per_person
-    + daily_spending
-)
-group_grand_total = total_per_person * num_people
-
-st.subheader("💷 Final Cost Breakdown")
-m1, m2, m3 = st.columns(3)
-m1.metric("Cost Per Person", f"£{total_per_person:.2f}")
-m2.metric("Hotel Per Person", f"£{hotel_per_person:.2f}")
-m3.metric(
-    f"Total ({num_people} People)",
-    f"£{group_grand_total:.2f}"
-)
-
-with st.expander("See Full Itemized Breakdown (Per Person)"):
-    st.write(f"🎟️ **Match Ticket:** £{match_ticket:.2f}")
-    st.write(
-        f"✈️ **Travel ({selected_transport}):** "
-        f"£{main_transport:.2f}"
-    )
-    st.write(
-        f"🚌 **Transfers / Subway:** "
-        f"£{extra_transfers:.2f}"
-    )
-    st.write(
-        f"🏨 **Hotel ({selected_hotel} - {nights} nights):** "
-        f"£{hotel_per_person:.2f}"
-    )
-    st.write(
-        f"🍽️ **Food & Drink:** "
-        f"£{daily_spending:.2f}"
-    )
-
-if nights == 0:
-    stay_str = "Day Trip (0 Nights)"
-else:
-    stay_str = f"{nights} Night(s) at {selected_hotel}"
-
-date_formatted = travel_date.strftime("%d %b")
-
-wa_lines = [
-    "🔵 *Rangers Trip Breakdown* 🔴",
-    f"⚽ *Match:* {fixture} ({date_formatted})",
-    f"🏨 *Stay:* {stay_str}",
-    f"✈️ *Travel:* {selected_transport}",
-    "",
-    f"💷 *Total Per Person: £{total_per_person:.2f}*",
-    f"• Ticket: £{match_ticket:.2f}",
-    f"• Flights/Ferry & Transfers: £{travel_per_person:.2f}",
-    f"• Hotel Share: £{hotel_per_person:.2f}",
-    f"• Food & Drink: £{daily_spending:.2f}"
-]
-
-wa_message = "\n".join(wa_lines)
-encoded_wa = urllib.parse.quote(wa_message)
-wa_link = f"https://wa.me/?text={encoded_wa}"
-
-st.link_button(
-    "📲 Send Breakdown to WhatsApp",
-    wa_link,
-    use_container_width=True
-)
+        # B. Fetch Live Hotel Prices in Glasgow
+        if out_date_str != ret_date_str:
+            try:
+                h_params = urllib.parse.urlencode({
+                    "engine": "google_hotels",
+                    "q": "Glasgow hotels",
+                    "check_in_date": out_date_str,
+                    "check_out_date": ret_date_str,
+                    "currency": "GBP",
+                    "hl": "en",
+                    "api_key": api_key
+                })
+                h_url = f"https://serpapi.com/search.json?{h_params}"
+                req
