@@ -28,7 +28,7 @@ st.markdown(
             🔵 Rangers Trip Tracker 🔴
         </h1>
         <p style="margin:5px 0 0 0; color:#e0e0e0;">
-            Ibrox Matchday & Travel Splitter
+            Ibrox Matchday & Travel Planner
         </p>
     </div>
     """,
@@ -60,7 +60,7 @@ with col1:
 
 with col2:
     num_travellers = st.number_input(
-        "Total Lads Travelling",
+        "People Travelling",
         min_value=1,
         max_value=10,
         value=2,
@@ -94,7 +94,7 @@ nights = st.slider(
 
 if nights == 0:
     st.info(
-        "⚡ **Day Trip Mode:** In and out on matchday "
+        "⚡ **Day Trip Mode:** Same-day return "
         "— £0 accommodation cost."
     )
     hotel_total = 0.0
@@ -121,7 +121,7 @@ else:
     hotel_per_person = hotel_total / num_travellers
     st.caption(
         f"Total Hotel: **£{hotel_total:.2f}** "
-        f"(£{hotel_per_person:.2f} each across {nights} night(s))"
+        f"(£{hotel_per_person:.2f} per person across {nights} night(s))"
     )
 
 st.divider()
@@ -147,7 +147,7 @@ with t_col2:
     is_dub = "Dublin" in route_type
     default_extra = 25.0 if is_dub else 12.0
     extra_transfers = st.number_input(
-        "Coaches / Subway / Taxis (£ each)",
+        "Coaches / Subway / Taxis (£ per person)",
         min_value=0.0,
         value=default_extra,
         step=2.0
@@ -155,10 +155,10 @@ with t_col2:
 
 st.divider()
 
-# 5. SPENDING MONEY (Pint & Scran)
-st.subheader("🍻 Matchday Kitty")
-daily_kitty = st.number_input(
-    "Pints & Food Budget (£ per person)",
+# 5. SPENDING MONEY
+st.subheader("🍽️ Food & Drink")
+daily_spending = st.number_input(
+    "Food & Drink Budget (£ per person)",
     min_value=0.0,
     value=60.0,
     step=10.0
@@ -172,16 +172,16 @@ total_per_person = (
     match_ticket
     + hotel_per_person
     + travel_per_person
-    + daily_kitty
+    + daily_spending
 )
 group_grand_total = total_per_person * num_travellers
 
 st.subheader("💷 Final Cost Breakdown")
 m1, m2, m3 = st.columns(3)
 m1.metric("Cost Per Person", f"£{total_per_person:.2f}")
-m2.metric("Hotel Share Each", f"£{hotel_per_person:.2f}")
+m2.metric("Hotel Per Person", f"£{hotel_per_person:.2f}")
 m3.metric(
-    f"Total ({num_travellers} Lads)",
+    f"Total ({num_travellers} People)",
     f"£{group_grand_total:.2f}"
 )
 
@@ -200,8 +200,8 @@ with st.expander("See Full Itemized Breakdown (Per Person)"):
         f"£{hotel_per_person:.2f}"
     )
     st.write(
-        f"🍻 **Food & Pints Kitty:** "
-        f"£{daily_kitty:.2f}"
+        f"🍽️ **Food & Drink:** "
+        f"£{daily_spending:.2f}"
     )
 
 if nights == 0:
@@ -217,11 +217,11 @@ wa_lines = [
     f"🛏️ *Stay:* {trip_type_str}",
     f"🛣️ *Route:* {route_type}",
     "",
-    f"💷 *Total Each: £{total_per_person:.2f}*",
+    f"💷 *Total Per Person: £{total_per_person:.2f}*",
     f"• Ticket: £{match_ticket:.2f}",
     f"• Travel & Transfers: £{travel_per_person:.2f}",
     f"• Hotel Share: £{hotel_per_person:.2f}",
-    f"• Pints/Food: £{daily_kitty:.2f}"
+    f"• Food & Drink: £{daily_spending:.2f}"
 ]
 
 wa_message = "\n".join(wa_lines)
