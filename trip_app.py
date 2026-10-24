@@ -2,62 +2,74 @@ import streamlit as st
 import datetime
 import urllib.parse
 
-# Page Setup
-st.set_page_config(page_title="Rangers Matchday Tracker", page_icon="🔵", layout="centered")
+st.set_page_config(
+    page_title="Rangers Tracker",
+    page_icon="🔵"
+)
 
-# Royal Blue Custom Styling
-st.markdown("""
-    <style>
-    .main-header {
-        background-color: #003399;
-        color: white;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-        border-bottom: 4px solid #CC0000;
-        margin-bottom: 20px;
-    }
-    </style>
-    <div class="main-header">
-        <h1 style="margin:0; color:white;">🔵 Rangers Trip Tracker 🔴</h1>
-        <p style="margin:5px 0 0 0; color:#e0e0e0;">Ibrox Matchday & Travel Splitter</p>
-    </div>
-""", unsafe_allow_html=True)
+st.title("🔵 Rangers Trip Tracker 🔴")
+st.caption("Ibrox Matchday & Travel Splitter")
 
-# 1. ONCE-A-DAY PRICE CHECKER (Runs max once every 24 hours / 86400 seconds)
 @st.cache_data(ttl=86400)
-def get_daily_baseline_rates(date_str):
-    last_checked = datetime.datetime.now().strftime("%d %b %Y at %H:%M")
-    default_flight = 65.0
-    default_hotel = 95.0
-    return default_flight, default_hotel, last_checked
+def get_rates(d_str):
+    now = datetime.datetime.now()
+    t_str = now.strftime("%d %b %H:%M")
+    return 65.0, 95.0, t_str
 
-# 2. MATCH & DATE DETAILS
 st.subheader("📅 Match Details")
-col1, col2 = st.columns(2)
-with col1:
-    fixture = st.text_input("Fixture / Opponent", value="Rangers vs ")
-    travel_date = st.date_input("Match Date", datetime.date.today())
-with col2:
-    num_travellers = st.number_input("Total Lads Travelling", min_value=1, max_value=10, value=2, step=1)
-    match_ticket = st.number_input("Match Ticket (£ per person)", min_value=0.0, value=48.0, step=1.0)
+c1, c2 = st.columns(2)
+with c1:
+    opp = st.text_input("Fixture", "Rangers vs ")
+    m_date = st.date_input("Date")
+with c2:
+    lads = st.number_input("Lads", 1, 10, 2)
+    tix = st.number_input("Ticket (£)", 0.0, 200.0, 48.0)
 
-est_flight, est_hotel, last_sync = get_daily_baseline_rates(str(travel_date))
-st.caption(f"🔄 *Daily baseline rates synced: {last_sync} (Updates once every 24h)*")
+f_est, h_est, sync = get_rates(str(m_date))
+st.caption(f"🔄 Rates synced: {sync} (24h cache)")
 
 st.divider()
 
-# 3. ACCOMMODATION (With 0-Night Day Trip Option)
 st.subheader("🏨 Accommodation")
-nights = st.slider("Nights in Glasgow", min_value=0, max_value=5, value=0)
+nights = st.slider("Nights in Glasgow", 0, 5, 0)
 
 if nights == 0:
-    st.info("⚡ **Day Trip Mode:** In and out on matchday — £0 accommodation cost.")
-    hotel_total = 0.0
-    hotel_per_person = 0.0
+    st.info("⚡ Day Trip Mode: £0 hotel cost.")
+    h_tot = 0.0
+    h_pp = 0.0
 else:
-    h_col1, h_col2 = st.columns(2)
-    with h_col1:
-        room_rate = st.number_input("Hotel Price per Night (£)", min_value=0.0, value=est_hotel, step=5.0)
-    with h_col2:
-        rooms_needed = st.number_input("Number of Rooms", min_value=1, max_
+    hc1, hc2 = st.columns(2)
+    with hc1:
+        rate = st.number_input("Room Rate (£)", 0.0, 500.0, h_est)
+    with hc2:
+        rooms = st.number_input("Rooms", 1, 5, 1)
+    h_tot = rate * nights * rooms
+    h_pp = h_tot / lads
+    st.caption(f"Hotel Total: £{h_tot:.2f}")
+
+st.divider()
+
+st.subheader("✈️ Travel & Transfers")
+routes = [
+    "Return Flight (BFS/BHD <-> GLA)",
+    "Out via GLA / Back via Dublin + Coach",
+    "Ferry (Belfast <-> Cairnryan)"
+]
+route = st.selectbox("Route", routes)
+
+tc1, tc2 = st.columns(2)
+with tc1:
+    trans = st.number_input("Flight/Ferry (£)", 0.0, 500.0, f_est)
+with tc2:
+    def_ex = 25.0 if "Dublin" in route else 12.0
+    extra = st.number_input("Transfers (£)", 0.0, 200.0, def_ex)
+
+st.divider()
+
+st.subheader("🍻 Matchday Kitty")
+kitty = st.number_input("Pints & Food (£)", 0.0, 500.0, 60.0)
+
+st.divider()
+
+trav_pp = trans + extra
+tot_pp = tix + h_pp + trav_pp + kitty
